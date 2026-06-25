@@ -1,0 +1,3 @@
+nexpy>=2.0.0
+lmfit
+scipy

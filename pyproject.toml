@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "4DQENSfitter"
+version = "0.0.1a1"
+description = "Data reduction for single crystal QENS"
+readme = "README.md"
+authors = [{name = "Jared Coles", email = "jared.robert.coles@gmail.com"}]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: BSD License",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+
+keywords = [
+    "neutron scattering",
+    "data analysis",
+    "visualization",
+    "QENS",
+]
+
+dependencies = [
+    "nexpy >= 2.0.0",
+    "lmfit",
+    "scipy",
+]
+
+[project.entry-points."nexpy.plugins"]
+initialize = "nxqens:plugin_menu"
+
+
+[project.scripts]
+

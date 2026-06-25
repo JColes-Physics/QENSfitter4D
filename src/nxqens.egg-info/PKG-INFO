@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: nxqens
+Version: 0.0.1a1
+Summary: Data reduction for single crystal QENS
+Author-email: Jared Coles <jared.robert.coles@gmail.com>
+Keywords: neutron scattering,data analysis,visualization,QENS
+Classifier: Development Status :: 4 - Beta
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Scientific/Engineering :: Physics
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Description-Content-Type: text/markdown
+Requires-Dist: nexpy>=2.0.0
+Requires-Dist: lmfit
+Requires-Dist: scipy
