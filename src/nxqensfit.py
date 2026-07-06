@@ -4,10 +4,8 @@ import lmfit
 from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialGaussianModel, LorentzianModel, ExponentialModel, ConstantModel
 from lmfit import minimize, Parameters, report_fit, fit_report, Model, CompositeModel
 from scipy.special import wofz, erfc
-from nexusformat.nexus import NXdata, NXentry, NXfield, nxopen
 from lmfit.lineshapes import s2, tiny
-from nexusformat.nexus import (NeXusError, NXdata, NXentry, NXfield, NXlink,
-                               nxgetconfig, nxopen, nxsetconfig)
+
 from pathlib import Path
 import logging
 

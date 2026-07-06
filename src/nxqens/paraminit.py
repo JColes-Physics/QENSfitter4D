@@ -34,66 +34,7 @@ import inspect
 import re
 from itertools import cycle
 
-def get_models():
-    """
-    Return a dictionary of LMFIT models.
 
-    This function returns a dictionary of LMFIT models, including those
-    defined in the LMFIT package and those defined in the
-    ``nexpy.models`` package. Additional models can also be defined in
-    the ``~/.nexpy/models`` directory or in another installed package,
-    which declares the entry point ``nexpy.models``. The models are
-    returned as a dictionary where the keys are the names of the models
-    and the values are the classes defining the models.
-    """
-    from lmfit.models import lmfit_models
-    models = lmfit_models
-    if 'Expression' in models:
-        del models['Expression']
-    if 'Gaussian-2D' in models:
-        del models['Gaussian-2D']
-
-    nexpy_models = load_models()
-
-    for model in nexpy_models:
-        try:
-            models.update(
-                dict((n.strip('Model'), m)
-                for n, m in inspect.getmembers(nexpy_models[model],
-                                               inspect.isclass)
-                if issubclass(m, Model) and n != 'Model'))
-        except ImportError:
-            pass
-
-    return models
-
-
-all_models = get_models()
-
-def get_methods():
-    """Return a dictionary of minimization methods in LMFIT."""
-    methods = {'leastsq': 'Levenberg-Marquardt',
-               'least_squares': 'Least-Squares minimization, '
-                                'using Trust Region Reflective method',
-               'differential_evolution': 'differential evolution',
-               'nelder': 'Nelder-Mead',
-               'lbfgsb': ' L-BFGS-B',
-               'powell': 'Powell',
-               'cg': 'Conjugate-Gradient',
-               'newton': 'Newton-CG',
-               'cobyla': 'Cobyla',
-               'bfgs': 'BFGS',
-               'tnc': 'Truncated Newton',
-               'trust-ncg': 'Newton-CG trust-region',
-               'trust-exact': 'nearly exact trust-region',
-               'trust-krylov': 'Newton GLTR trust-region',
-               'trust-constr': 'trust-region for constrained optimization',
-               'dogleg': 'Dog-leg trust-region',
-               'slsqp': 'Sequential Linear Squares Programming'}
-    return methods
-
-
-all_methods = get_methods()
 
 def show_dialog(parent=None):
     """Entry point called when menu item is clicked."""
@@ -137,7 +78,7 @@ class initparamswindow(NXDialog):
         pass
 
     def open_raster_window(self):
-        dialog3 = FittingDialog(nxdata=self.selected_data,nxentry=self.entry)
+        dialog3 = FittingDialog(nxroot=self.root,nxdata=self.selected_data,nxentry=self.entry)
         dialog3.show()
         pass
 
@@ -1000,7 +941,7 @@ class FittingWorker(QThread):
 class FittingDialog(NXDialog):
     """Dialog for configuring and running multithreaded fitting."""
     
-    def __init__(self, parent=None, nxdata=None, nxentry=None):
+    def __init__(self,nxroot=None, parent=None, nxdata=None, nxentry=None):
         """
         Args:
             parent: Parent widget
@@ -1009,6 +950,10 @@ class FittingDialog(NXDialog):
         """
         super().__init__(parent=parent)
         
+        try:
+            self.nxroot = nxroot
+        except:
+            self.nxroot = None
         self.nxdata = nxdata
         self.nxentry = nxentry
         self.init_conditions = self.nxentry.QENSfit_conditions
@@ -1351,12 +1296,27 @@ class FittingDialog(NXDialog):
                 nxsave[param].signal[l,k,h] = result.params[param].value
                 nxsave[param].signal_errors[l,k,h] = result.params[param].stderr
 
+        if self.root:
+            self.root.unlock()
+            if 'QENSfit_results' in self.nxentry:
+                del self.nxentry['QENSfit_results']
+            self.nxentry['QENSfit_results'] = nxsave
 
-        if 'QENSfit_results' in self.nxentry:
-            del self.nxentry['QENSfit_results']
-        self.nxentry['QENSfit_results'] = nxsave
+            self.logger.info('Results saved to QENSfit_results')
+            self.root.lock()
+        elif not self.root:
+            try:
+                if 'QENSfit_results' in self.nxentry:
+                    del self.nxentry['QENSfit_results']
+                self.nxentry['QENSfit_results'] = nxsave
 
-        self.logger.info('Results saved to QENSfit_results')
+                self.logger.info('Results saved to QENSfit_results')
+            except:
+                self.logger.info('Failed to save results, attempting to pickle instead')
+                import pickle
+                with open('emergency_pickle.pkl', 'wb') as f:
+                    pickle.dump(self.results_matrix,f)
+                
             
 
         

@@ -18,72 +18,23 @@ from lmfit import minimize, Parameters, report_fit, fit_report, Model, Composite
 from lmfit.lineshapes import s2, tiny
 from lmfit import __version__ as lmfit_version
 
+
+from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
+                              QDoubleSpinBox, QPushButton, QProgressBar, QGroupBox)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtGui import QFont
+
+import multiprocessing as mp
+from queue import Queue
+import threading
+
 from nxqensfit import NXQENS
 
 import inspect
 import re
 from itertools import cycle
 
-def get_models():
-    """
-    Return a dictionary of LMFIT models.
 
-    This function returns a dictionary of LMFIT models, including those
-    defined in the LMFIT package and those defined in the
-    ``nexpy.models`` package. Additional models can also be defined in
-    the ``~/.nexpy/models`` directory or in another installed package,
-    which declares the entry point ``nexpy.models``. The models are
-    returned as a dictionary where the keys are the names of the models
-    and the values are the classes defining the models.
-    """
-    from lmfit.models import lmfit_models
-    models = lmfit_models
-    if 'Expression' in models:
-        del models['Expression']
-    if 'Gaussian-2D' in models:
-        del models['Gaussian-2D']
-
-    nexpy_models = load_models()
-
-    for model in nexpy_models:
-        try:
-            models.update(
-                dict((n.strip('Model'), m)
-                for n, m in inspect.getmembers(nexpy_models[model],
-                                               inspect.isclass)
-                if issubclass(m, Model) and n != 'Model'))
-        except ImportError:
-            pass
-
-    return models
-
-
-all_models = get_models()
-
-def get_methods():
-    """Return a dictionary of minimization methods in LMFIT."""
-    methods = {'leastsq': 'Levenberg-Marquardt',
-               'least_squares': 'Least-Squares minimization, '
-                                'using Trust Region Reflective method',
-               'differential_evolution': 'differential evolution',
-               'nelder': 'Nelder-Mead',
-               'lbfgsb': ' L-BFGS-B',
-               'powell': 'Powell',
-               'cg': 'Conjugate-Gradient',
-               'newton': 'Newton-CG',
-               'cobyla': 'Cobyla',
-               'bfgs': 'BFGS',
-               'tnc': 'Truncated Newton',
-               'trust-ncg': 'Newton-CG trust-region',
-               'trust-exact': 'nearly exact trust-region',
-               'trust-krylov': 'Newton GLTR trust-region',
-               'trust-constr': 'trust-region for constrained optimization',
-               'dogleg': 'Dog-leg trust-region',
-               'slsqp': 'Sequential Linear Squares Programming'}
-    return methods
-
-
-all_methods = get_methods()
 
 def show_dialog(parent=None):
     """Entry point called when menu item is clicked."""
@@ -127,7 +78,7 @@ class initparamswindow(NXDialog):
         pass
 
     def open_raster_window(self):
-        dialog3 = FittingDialog(nxdata=self.selected_data,nxentry=self.entry)
+        dialog3 = FittingDialog(nxroot=self.root,nxdata=self.selected_data,nxentry=self.entry)
         dialog3.show()
         pass
 
@@ -768,21 +719,6 @@ Parameters
 
 
 
-
-
-
-import nexpy
-from nexpy.gui.dialogs import NXDialog
-import numpy as np
-from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
-                              QDoubleSpinBox, QPushButton, QProgressBar, QGroupBox)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont
-import multiprocessing as mp
-from queue import Queue
-import threading
-
-
 class FittingWorker(QThread):
     """Worker thread that manages the fitting process with multithreading."""
     
@@ -941,6 +877,10 @@ class FittingWorker(QThread):
                     except:
                         data = NXdata(np.flip(data.nxsignal),axes=(data[data.axes]-diff))
 
+                if (np.isnan(data.nxsignal).sum() > data.nxsignal.shape[0]/4) or ((data.nxsignal==0).sum() > data.nxsignal.shape[0]/4):
+                    result_queue.put(None)
+                    pass
+
                 y = data.nxsignal.nxvalue
                 y = np.nan_to_num(y)
                 x = data[data.axes].nxvalue
@@ -983,21 +923,25 @@ class FittingWorker(QThread):
                 }
                 result_queue.put(result_dict)
 
-                try:
-                    self.logger.info(f"Thread {thread_id} finished")
-                except:
-                    pass
+                # try:
+                #     self.logger.info(f"Thread {thread_id} finished")
+                # except:
+                #     pass
                 
             except Exception as e:
+                result_dict = {
+                    'coords': (float(h), float(k), float(l)),
+                    'result': None
+                }
                 # Log error but continue processing
-                self.logger.info(f"Error fitting ({h}, {k}, {l}): {str(e)}")
-                result_queue.put(None)
+                #self.logger.info(f"Error fitting ({h}, {k}, {l}): {str(e)}")
+                result_queue.put(result_dict)
 
 
 class FittingDialog(NXDialog):
     """Dialog for configuring and running multithreaded fitting."""
     
-    def __init__(self, parent=None, nxdata=None, nxentry=None):
+    def __init__(self,nxroot=None, parent=None, nxdata=None, nxentry=None):
         """
         Args:
             parent: Parent widget
@@ -1006,6 +950,10 @@ class FittingDialog(NXDialog):
         """
         super().__init__(parent=parent)
         
+        try:
+            self.nxroot = nxroot
+        except:
+            self.nxroot = None
         self.nxdata = nxdata
         self.nxentry = nxentry
         self.init_conditions = self.nxentry.QENSfit_conditions
@@ -1240,8 +1188,8 @@ class FittingDialog(NXDialog):
         fit_result = result['result']
         self.results_matrix[coords] = fit_result
 
-        self.logger.info(f"Result stored: {coords} -> {fit_result}")    
-        self.logger.info(f"Total results so far: {len(self.results_matrix)}")
+        #self.logger.info(f"Result stored: {coords} -> {fit_result}")    
+        #self.logger.info(f"Total results so far: {len(self.results_matrix)}")
         
         # Optionally log or process the result
         # print(f"Fitted {coords}: {fit_result}")
@@ -1340,18 +1288,31 @@ class FittingDialog(NXDialog):
         nxsave['rsquared'] = NXdata(signal=np.zeros(size),axes=(L,K,H))
         nxsave['fitted_parameters'] = self.init_conditions
 
-        for idx,result in self.results_matrix:
-            h,k,l = float(idx[1]),float(idx[3]),float(idx[5])
+        for idx,result in self.results_matrix.items():
+            h,k,l = idx
             nxsave['redchi'].signal[l,k,h] = result.redchi
             nxsave['rsquared'].signal[l,k,h] = result.rsquared
             for param in params_to_save:
                 nxsave[param].signal[l,k,h] = result.params[param].value
                 nxsave[param].signal_errors[l,k,h] = result.params[param].stderr
 
+        if self.root:
+            self.root.unlock()
+            if 'QENSfit_results' in self.nxentry:
+                del self.nxentry['QENSfit_results']
+            self.nxentry['QENSfit_results'] = nxsave
 
-        if 'QENSfit_results' in self.nxentry:
-            del self.nxentry['QENSfit_results']
-        self.nxentry['QENSfit_results'] = nxsave
+            self.logger.info('Results saved to QENSfit_results')
+            self.root.lock()
+        elif not self.root:
+            try:
+                if 'QENSfit_results' in self.nxentry:
+                    del self.nxentry['QENSfit_results']
+                self.nxentry['QENSfit_results'] = nxsave
+
+                self.logger.info('Results saved to QENSfit_results')
+            except:
+                self.logger.info('Failed to save results')
             
 
         
