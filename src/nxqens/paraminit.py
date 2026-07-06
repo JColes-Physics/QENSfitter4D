@@ -746,7 +746,7 @@ class SpectralFittingWidget(NXDialog):
         group.setLayout(layout)
         return group
     
-    def update_results_display(self, fit_result):
+    def update_results_display(self, fit_result,weights = np.array([])):
         """
         Update the results text area with fitting results.
         
@@ -990,9 +990,9 @@ Parameters
         data = self.select_data()
 
         if self.cut_data_cb.isChecked():
-            mask = (data[data.axes].nxvalue>self.cut_min_input.value()) & (data[data.axes].nxvalue<self.cut_max_input.value()) | (data.nxsignal.nxvalue==0)
+            mask = (data[data.axes].nxvalue>self.cut_min_input.value()) & (data[data.axes].nxvalue<self.cut_max_input.value()) | (data.nxsignal.nxvalue==0) | np.isnan(data.nxsignal.nxvalue)
         if not self.cut_data_cb.isChecked():
-            mask = data.nxsignal.nxvalue==0
+            mask = data.nxsignal.nxvalue==0 | np.isnan(data.nxsignal.nxvalue)
         y = data.nxsignal.nxvalue
         y = np.nan_to_num(y)
         x = data[data.axes].nxvalue
@@ -1043,6 +1043,7 @@ Parameters
         if v1:
             voigt1Params = voigt1.guess(y,x)
             residual -= voigt1.eval(params=voigt1Params,x=x)
+            voigt1Params['v1_amplitude'].set(value=voigt1Params['v1_amplitude']*.4,vary=True)
             voigt1Params['v1_amplitude'].set(min=tiny,max=y.max(),vary=True)
             if voigt1Params['v1_amplitude'].value<0:
                 voigt1Params['v1_amplitude'].set(value=tiny)
@@ -1054,6 +1055,7 @@ Parameters
         if v2:
             voigt2Params = voigt2.guess(y,x)
             residual -= voigt2.eval(params=voigt2Params,x=x)
+            voigt2Params['v2_amplitude'].set(value=voigt2Params['v2_amplitude']*.4,vary=True)
             voigt2Params['v2_amplitude'].set(min=tiny,max=y.max(),vary=True)
             if voigt2Params['v2_amplitude'].value<0:
                 voigt2Params['v2_amplitude'].set(value=tiny)
@@ -1110,11 +1112,16 @@ Parameters
                 model += voigt2
                 params += voigt2Params
 
-        weights = np.ones_like(mask)
+        weights = np.ones(mask.shape)
         weights *= np.logical_not(mask)
         result = model.fit(y,params,x=x,nan_policy='propagate',method=self.method_combo.currentText(),weights=weights) 
         result = model.fit(y,result.params,x=x,nan_policy='propagate',method='leastsq',weights=weights)
         
         self.fit_result = result
-        self.update_results_display(self.fit_result)
+
+        debug = False
+        if debug:
+            self.update_results_display(self.fit_result,weights)
+        if not debug:
+            self.update_results_display(self.fit_result)
     
