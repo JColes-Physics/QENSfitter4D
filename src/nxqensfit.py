@@ -13,44 +13,47 @@ import logging
 
 
 class NXQENS:
-    def __init__(self, root, scan, center=None, sigma=None, qfit=False, expfit=False, emax=None, emin=None, incoherentsig = None, method='powell'):
+    def __init__(self, x,y,mask=None,g1=False,v1=False,v2=False,decay=False,g1frac=0.01,v1frac=0.01,v2frac=0.01,sigma=0.1,center=0,decayval=0,fixsigma=False,fixcenter=False,v2gamm=None,method='Powell'):
         """
-        Initialize the QENS.
-        
-        Parameters
+        Function for fitting QENS linewidths
         ----------
+        x,y : float arrays
+            Data x,y values
+        mask : float array
+            Data to not fit (data points corresponding to 1 in the mask do not factor in the fit)
+        g1,v1,v2,decay : bool
+            Boolian decisions for including gauss, voigt(s), and exponential decay contributions to fit
+        g1frac,v1frac,v2frac : float
+            Float values indicating proportion of LMFIT guess amplitudes to force before fitting
         sigma : float
             Gaussian sigma parameter
         center : float
             Peak center position
-        qfit : bool
-            Include quadratic background fitting
-        expfit : bool
-            Use exponential-Gaussian model instead of standard Gaussian
-        emax : double
-            Maximum energy offset
-        emin : double
-            Minimum energy offset
-        method : str
-            Fitting method for lmfit (default: 'powell')
-        incoherentsig : double
-            Sigma value for any prefit incoherent sigma
+        decayval : float
+            Value used by exponential decay in the event there is an exponential decay contribution
+        fixsigma,fixcenter : bool
+            State if given sigma or center values should be fixed (True) or allowed to vary (False)
+        v2gamm : float
+            If not None, will pass v2gamm as fixed variable for second Voigt Gamma parameter
         """
+        self.x = x
+        self.y = y
+        self.mask = mask
+        self.g1 = g1
+        self.v1 = v1
+        self.v2 = v2
+        self.decay = decay
+        self.g1frac = g1frac
+        self.v1frac = v1frac
+        self.v2frac = v2frac
+        self.decay = decay
         self.sigma = sigma
         self.center = center
-        self.qfit = qfit
-        self.expfit = expfit
-        self.emax = emax
-        self.emin = emin
+        self.decayval = decayval
+        self.fixsigma = fixsigma
+        self.fixcenter = fixcenter
+        self.v2gamm = v2gamm
         self.method = method
-        self.root = root
-        self.entry = root.entry
-        self.scan = self.entry[scan]
-        self.directory = Path(
-            self.entry['transform'].nxsignal.nxfilename).parent
-        self.task_directory = self.directory.parent.parent/'tasks'
-        self.sample = self.directory.parent.name
-        self.incoherent = incoherentsig
 
 
         self._logger = None
@@ -72,425 +75,356 @@ class NXQENS:
             self._logger.addHandler(fileHandler)
         return self._logger
 
- # =====================================================================
-    # Utility Methods
-    # =====================================================================
+    def fit_data(self):
+        """
+        Perform the fit using selected parameters and method.
+        """
+        x = self.x
+        y = self.y
+        mask = self.mask
+        g1 = self.g1
+        v1 = self.v1
+        v2 = self.v2
+        decay = self.decay
+        g1frac = self.g1frac
+        v1frac = self.v1frac
+        v2frac = self.v2frac
+        decay = self.decay
+        sigma = self.sigma
+        center = self.center
+        decayval = self.decayval
+        fixsigma = self.fixsigma
+        fixcenter = self.fixcenter
+        v2gamm = self.v2gamm
+        method = self.method
+
+        weights = np.ones(mask.shape)
+        weights *= np.logical_not(mask)
+
+
+        # Inititialize QENS Functions according to boolean user inputs
+        if decay:
+            gauss = ExponentialGaussianModel(prefix='g0_')
+            gbkg = ExponentialGaussianModel(prefix='gbkg_')
+            if v1:
+                voigt1 = LorentzianModel(prefix='v1_')
+                gauss1 = ExponentialGaussianModel(prefix='g1_')
+            if v2:
+                voigt2 = LorentzianModel(prefix='v2_')
+                gauss2 = ExponentialGaussianModel(prefix='g2_')
+        
+        if not decay:
+            if g1:
+                gauss = GaussianModel(prefix='g0_')
+            if v1:
+                voigt1 = VoigtModel(prefix='v1_')
+            if v2:
+                voigt2 = VoigtModel(prefix='v2_')
+
+        residual = y
+        # Establish Gaussian initalization parameters, and boundary conditions
+        if g1:
+            gaussParams = gauss.guess(y,x)
+            gaussParams['g0_amplitude'].set(
+                min=0,
+                max=y.max()*1.2,
+                vary=True,
+                value=gaussParams['g0_amplitude']*g1frac,
+                )
+            if gaussParams['g0_amplitude']<0:
+                gaussParams['g0_amplitude'].set(value=-1*gaussParams['g0_amplitude'])
+            gaussParams['g0_center'].set(value=center,
+                                         vary=(not fixcenter))
+            gaussParams['g0_sigma'].set(value=sigma,
+                                        vary=(not fixsigma))
+            if decay:
+                gaussParams['g0_gamma'].set(value=decayval)
+            residual -= gauss.eval(params=gaussParams,x=x)
+
+                            
+        # Establish Voigt 1 initialization parameters, boundary conditions, and relationships with function g0 if initialized
+        if v1:
+            voigt1Params = voigt1.guess(residual,x)
+            voigt1Params['v1_amplitude'].set(
+                value=voigt1Params['v1_amplitude']*v1frac,
+                vary=True,
+                min=0,
+                max=y.max()*1.2,
+            )
+            if voigt1Params['v1_amplitude'].value<0:
+                voigt1Params['v1_amplitude'].set(value=-1*voigt1Params['v1_amplitude'])
+            residual -= voigt1.eval(params=voigt1Params,x=x)
+            if not decay:
+                voigt1Params['v1_gamma'].set(expr='',vary=True,min=tiny)
+                if not g1:
+                    voigt1Params['v1_sigma'].set(value=sigma,
+                                                vary=(not fixsigma))
+                    voigt1Params['v1_center'].set(value=center,
+                                            vary=(not fixcenter))
+                if g1:
+                    voigt1Params['v1_sigma'].set(expr='g0_sigma')
+                    voigt1Params['v1_center'].set(expr='g0_center')
+
+            if decay:
+                gauss1Params = gauss1.guess(y,x)
+                voigt1Params['v1_center'].set(expr='g1_center')
+                if g1:
+                    for param in gauss1Params:
+                        gauss1Params[param].set(expr='g0_'+param[3:])
+                if not g1:
+                    gauss1Params['g1_gamma'].set(value=decayval)
+                    gauss1Params['g1_amplitude'].set(min=0,
+                                                     max=y.max(),
+                                                     vary=True,
+                                                     value=gauss1Params['g1_amplitude']*g1frac,
+                                                     )
+                    if gauss1Params['g1_amplitude']<0:
+                        gauss1Params['g1_amplitude'].set(value=-1*gauss1Params['g1_amplitude'])
+                    gauss1Params['g1_center'].set(value=center,
+                                                  vary=(not fixcenter))
+                    gauss1Params['g1_sigma'].set(value=sigma,
+                                                 vary=(not fixsigma))
+
+                    
+        
+        # Establish Voigt 2 initialization parameters, boundary conditions, and relationships with functions g0 and v1 if inizialized
+        if v2:
+            voigt2Params = voigt2.guess(residual,x)
+            voigt2Params['v2_amplitude'].set(
+                value=voigt2Params['v2_amplitude']*v2frac,
+                vary=True,
+                min=0,
+                max=y.max()*1.2,
+                )
+            if voigt2Params['v2_amplitude'].value<0:
+                voigt2Params['v2_amplitude'].set(value=-1*voigt2Params['v2_amplitude'])
+            residual -= voigt2.eval(params=voigt2Params,x=x)
+            if not decay:
+                if v2gamm == None:
+                    voigt2Params['v2_gamma'].set(expr='',vary=True,min=tiny)
+                elif v2gamm != None:
+                    voigt2Params['v2_gamma'].set(expr='',value=v2gamm,vary=False)
+                if g1:
+                    voigt2Params['v2_sigma'].set(expr='g0_sigma')
+                    voigt2Params['v2_center'].set(expr='g0_center')
+                if (not g1) & v1:
+                    voigt2Params['v2_sigma'].set(expr='v1_sigma')
+                    voigt2Params['v2_center'].set(expr='v1_center')
+                if (not g1) & (not v1):
+                    voigt2Params['v2_sigma'].set(value=sigma,
+                                                vary=(not fixsigma))
+                    voigt2Params['v2_center'].set(value=center,
+                                    vary=(not fixcenter))
+            if decay:
+                gauss2Params = gauss2.guess(y,x)
+                voigt2Params['v2_center'].set(expr='g2_center')
+                if v2gamm != None:
+                    voigt2Params['v2_sigma'].set(expr='',value=v2gamm,vary=False)
+                if g1:
+                    for param in gauss2Params:
+                        gauss2Params[param].set(expr='g0_'+param[3:])
+                if (not g1) & v1:
+                    for param in gauss2Params:
+                        gauss2Params[param].set(expr='g1_'+param[3:])
+                if (not g1) & (not v1):
+                    gauss2Params['g2_gamma'].set(value=decayval)
+                    gauss2Params['g2_amplitude'].set(min=0,
+                                                     max=y.max(),
+                                                     vary=True,
+                                                     value=gauss2Params['g2_amplitude']*g1frac,
+                                                     )
+                    if gauss2Params['g2_amplitude']<0:
+                        gauss2Params['g2_amplitude'].set(value=-1*gauss2Params['g2_amplitude'])
+                    gauss2Params['g2_center'].set(value=center,
+                                                  vary=(not fixcenter))
+                    gauss2Params['g2_sigma'].set(value=sigma,
+                                                 vary=(not fixsigma))
+
+
+        
+        const = QuadraticModel(prefix='bkg_')
+        constParams = const.guess(residual,x)
+        constParams['bkg_a'].set(value=0,vary=False)
+        constParams['bkg_b'].set(value=0,vary=False)
+        if constParams['bkg_c'].value < 0 or constParams['bkg_c'].value > (min(y[y!=0])):
+            constParams['bkg_c'].set(value=tiny)
+        constParams['bkg_c'].set(
+            min=0.00,
+            #max=min(min(y[y!=0]),1)
+            )
+
+
+        #initialize model using functional constant background
+        if not decay:
+            model = const
+            params = constParams
+        if decay:
+            gbkgParams = gbkg.guess(y,x)
+            if v2:
+                for param in gbkgParams:
+                        gbkgParams[param].set(expr='g2_'+param[5:])
+            if v1:
+                for param in gbkgParams:
+                        gbkgParams[param].set(expr='g1_'+param[5:])
+            if g1:
+                for param in gbkgParams:
+                        gbkgParams[param].set(expr='g0_'+param[5:])
+            elif not (v2 or v1 or g1):
+                gbkgParams['g2_gamma'].set(value=decayval)
+                gbkgParams['gbkg_amplitude'].set(min=0,
+                                                    max=y.max(),
+                                                    vary=True,
+                                                    value=gbkgParams['gbkg_amplitude']*g1frac,
+                                                    )
+                if gbkgParams['gbkg_amplitude']<0:
+                    gbkgParams['gbkg_amplitude'].set(value=-1*gbkgParams['gbkg_amplitude'])
+                gbkgParams['gbkg_center'].set(value=center,
+                                                vary=(not fixcenter))
+                gbkgParams['gbkg_sigma'].set(value=sigma,
+                                                vary=(not fixsigma))
+
+            model = CompositeModel(gbkg,const,self.convolve)
+            params = constParams + gbkgParams
+
+
+        # Create full model
+        if decay:
+            if g1:
+                model += gauss
+                params += gaussParams
+            if v1:
+                model += CompositeModel(gauss1,voigt1,self.convolve)
+                params += gauss1Params 
+                params += voigt1Params
+            if v2:
+                model += CompositeModel(gauss2,voigt2,self.convolve)
+                params += gauss2Params 
+                params += voigt2Params
+        if not decay:
+            if g1:
+                model += gauss
+                params += gaussParams
+            if v1:
+                model += voigt1
+                params += voigt1Params
+            if v2:
+                model += voigt2
+                params += voigt2Params
+
+        # Fit results, once with prefered fitting method, and second time to establish fitting errors and QOF
+        result = model.fit(y,params,x=x,nan_policy='propagate',method=method,weights=weights) 
+        result = model.fit(y,result.params,x=x,nan_policy='propagate',method='leastsq',weights=weights)
+        
+        return result
     
-    @staticmethod
-    def ErrorModel(x):
-        """
-        Complementary error function model.
-        
-        Parameters
-        ----------
-        x : array-like
-            Input values
-            
-        Returns
-        -------
-        array-like
-            erfc(x)
-        """
-        return erfc(x)
-    
-    @staticmethod
-    def incoherentmodel(x):
-        """
-        Complementary error function model.
-        
-        Parameters
-        ----------
-        x : array-like
-            Input values
-            
-        Returns
-        -------
-        array-like
-            erfc(x)
-        """
-        return erfc(x)
-    
-    @staticmethod
-    def convolve(dat, kernel):
-        """
-        Simple convolution of two arrays with padding.
-        
-        Pads the data at edges to preserve array length and applies 
-        convolution symmetrically.
-        
-        Parameters
-        ----------
-        dat : array-like
-            Input data array
-        kernel : array-like
-            Convolution kernel
-            
-        Returns
-        -------
-        array-like
-            Convolved array with same length as input
-        """
+    def convolve(self, dat, kernel):
+        """simple convolution of two arrays"""
         npts = min(len(dat), len(kernel))
         pad = np.ones(npts)
-        tmp = np.concatenate((pad * dat[0], dat, pad * dat[-1]))
+        tmp = np.concatenate((pad*dat[0], dat, pad*dat[-1]))
         out = np.convolve(tmp, kernel, mode='valid')
         noff = int((len(out) - npts) / 2)
-        return out[noff:noff + npts]
+        return (out[noff:])[:npts]
     
-    @staticmethod
-    def invexpgauss(x, amplitude=1, center=0, sigma=1.0, gamma=1.0):
-        """
-        Inverse exponential-Gaussian function.
-        
-        Parameters
-        ----------
-        x : array-like
-            x values
-        amplitude : float
-            Peak amplitude
-        center : float
-            Peak center
-        sigma : float
-            Gaussian width
-        gamma : float
-            Exponential decay parameter
-            
-        Returns
-        -------
-        array-like
-            Function values
-        """
-        gss = gamma * sigma * sigma
-        arg1 = gamma * (x - center + gss / 2.0)
-        arg2 = (center + gss - x) / max(tiny, sigma * np.sqrt(2))
-        return amplitude * (gamma / 2) * np.exp(arg1) * erfc(arg2)
-    
-    # =====================================================================
-    # Model Creation Methods
-    # =====================================================================
-    
-    def _create_gaussian_model(self):
-        """Create Gaussian model based on expfit setting."""
-        if self.expfit:
-            return ExponentialGaussianModel(prefix='g1_')
-        else:
-            return GaussianModel(prefix='g1_')
-    
-    def _create_voigt_model(self):
-        """Create Voigt model (Lorentzian for expfit case)."""
-        if self.expfit:
-            return LorentzianModel(prefix='v1_')
-        else:
-            return VoigtModel(prefix='v1_')
-    
-    def _create_quadratic_model(self):
-        """Create quadratic background model."""
-        return QuadraticModel(prefix='q1_')
-    
-    # =====================================================================
-    # Parameter Setup Methods
-    # =====================================================================
-    
-    def _setup_gaussian_params(self, gauss, y, x):
-        """
-        Initialize and configure Gaussian model parameters.
-        
-        Parameters
-        ----------
-        gauss : lmfit Model
-            Gaussian model instance
-        y : array-like
-            Data to fit
-        x : array-like
-            x values
-            
-        Returns
-        -------
-        lmfit Parameters
-            Configured parameters
-        """
-        params = gauss.guess(y, x)
-        params['g1_amplitude'].set(
-            value=params['g1_amplitude'] * 0.4, 
-            vary=True, 
-            min=0
+    def fit_data_unpickled(self):
+        result = self.fit_data()
+
+        if self.g1:
+            gauss_amplitude_value = result.params['g0_amplitude'].value
+            gauss_amplitude_stderr = result.params['g0_amplitude'].stderr
+            sigma_value = result.params['g0_sigma'].value
+            sigma_stderr = result.params['g0_sigma'].stderr
+            center_value = result.params['g0_center'].value
+            center_stderr = result.params['g0_center'].stderr
+            if self.decay:
+                decay_value = result.params['g0_gamma'].value
+                decay_value = result.params['g0_gamma'].stderr
+        if not self.g1:
+            gauss_amplitude_value = 0
+            gauss_amplitude_stderr = 0
+
+        if self.v1:
+            v1_amplitude_value = result.params['v1_amplitude'].value
+            v1_amplitude_stderr = result.params['v1_amplitude'].stderr
+            if not self.decay:
+                v1_gamma_value = result.params['v1_gamma'].value
+                v1_gamma_stderr = result.params['v1_gamma'].stderr
+                if not self.g1:
+                    sigma_value = result.params['v1_sigma'].value
+                    sigma_stderr = result.params['v1_sigma'].stderr
+                    center_value = result.params['v1_center'].value
+                    center_stderr = result.params['v1_center'].stderr
+            elif self.decay:
+                v1_gamma_value = result.params['v1_sigma'].value
+                v1_gamma_stderr = result.params['v1_sigma'].stderr
+                if not self.g1:
+                    sigma_value = result.params['g1_sigma'].value
+                    sigma_stderr = result.params['g1_sigma'].stderr
+                    center_value = result.params['g1_center'].value
+                    center_stderr = result.params['g1_center'].stderr
+                    decay_value = result.params['g1_gamma'].value
+                    decay_stderr = result.params['g1_gamma'].value
+        if not self.v1:
+            v1_amplitude_value = 0
+            v1_amplitude_stderr = 0
+            v1_gamma_value = 0
+            v1_gamma_stderr = 0
+
+
+        if self.v2:
+            v2_amplitude_value = result.params['v2_amplitude'].value
+            v2_amplitude_stderr = result.params['v2_amplitude'].stderr
+            if not self.decay:
+                v2_gamma_value = result.params['v2_gamma'].value
+                v2_gamma_stderr = result.params['v2_gamma'].stderr
+                if (not self.g1) and (not self.v1):
+                    sigma_value = result.params['v2_sigma'].value
+                    sigma_stderr = result.params['v2_sigma'].stderr
+                    center_value = result.params['v2_center'].value
+                    center_stderr = result.params['v2_center'].stderr
+            elif self.decay:
+                v2_gamma_value = result.params['v2_sigma'].value
+                v2_gamma_stderr = result.params['v2_sigma'].stderr
+                if (not self.g1) and (not self.v1):
+                    sigma_value = result.params['g2_sigma'].value
+                    sigma_stderr = result.params['g2_sigma'].stderr
+                    center_value = result.params['g2_center'].value
+                    center_stderr = result.params['g2_center'].stderr
+                    decay_value = result.params['g2_gamma'].value
+                    decay_stderr = result.params['g2_gamma'].value
+        if not self.v2:
+            v2_amplitude_value = 0
+            v2_amplitude_stderr = 0
+            v2_gamma_value = 0
+            v2_gamma_stderr = 0
+
+        if not self.decay:
+            decay_value = 0
+            decay_stderr = 0
+
+        bkg_c_value = result.params['bkg_c'].value
+        bkg_c_stderr = result.params['bkg_c'].stderr
+
+        output = (
+            gauss_amplitude_value,
+            gauss_amplitude_stderr,
+            v1_amplitude_value,
+            v1_amplitude_stderr,
+            v1_gamma_value,
+            v1_gamma_stderr,
+            v2_amplitude_value,
+            v2_amplitude_stderr,
+            v2_gamma_value,
+            v2_gamma_stderr,
+            decay_value,
+            decay_stderr,
+            bkg_c_value,
+            bkg_c_stderr,
+            sigma_value,
+            sigma_stderr,
+            center_value,
+            center_stderr,
+            result.rsquared,
+            result.redchi,
         )
-        params['g1_center'].set(value=self.center, vary=True)
-        params['g1_sigma'].set(value=self.sigma, vary=False)
-        
-        if self.expfit:
-            params['g1_gamma'].set(min=3, max=6)
-        
-        return params
-    
-    def _setup_voigt_params(self, voigt, y_residual, x, params_gauss):
-        """
-        Initialize and configure Voigt model parameters.
-        
-        Parameters
-        ----------
-        voigt : lmfit Model
-            Voigt model instance
-        y_residual : array-like
-            Residual data after removing Gaussian
-        x : array-like
-            x values
-        params_gauss : lmfit Parameters
-            Gaussian parameters for reference
-            
-        Returns
-        -------
-        lmfit Parameters
-            Configured parameters
-        """
-        params = voigt.guess(y_residual, x)
-        params['v1_center'].set(expr='g1_center')
-        params['v1_amplitude'].set(min=0)
-        
-        if not self.expfit:
-            params['v1_sigma'].set(expr='g1_sigma')
-            params['v1_gamma'].set(expr='', vary=True, min=0)
-        
-        return params
-    
-    def _setup_quadratic_params(self, quad, y_residual, x):
-        """
-        Initialize and configure quadratic background parameters.
-        
-        Parameters
-        ----------
-        quad : lmfit Model
-            Quadratic model instance
-        y_residual : array-like
-            Residual data
-        x : array-like
-            x values
-            
-        Returns
-        -------
-        lmfit Parameters
-            Configured parameters
-        """
-        params = quad.guess(y_residual, x)
-        params['q1_c'].set(min=0)
-        params['q1_a'].set(value=0, max=0, min=-1, vary=False)
-        params['q1_b'].set(value=0, vary=False)
-        return params
-    
-    
-    # =====================================================================
-    # Data Extraction Methods
-    # =====================================================================
-    
-    def _extract_data(self, scan, H, K, L, cuberad):
-        """
-        Extract data from scan around specified coordinates.
-        
-        Parameters
-        ----------
-        scan : array-like
-            4D scan data (E, H, K, L)
-        H, K, L : float
-            Coordinates
-        cuberad : int
-            Radius of cube around center
-            
-        Returns
-        -------
-        tuple
-            (extracted data, validity flag)
-        """
-        center = [L, K, H]
-        Emax = self.emax
-        Emin = self.emin
-        
-        data = scan[
-            Emin:Emax,
-            (center[0]-cuberad):(center[0]+cuberad),
-            (center[1]-cuberad):(center[1]+cuberad),
-            (center[2]-cuberad):(center[2]+cuberad)
-        ].sum((1, 2, 3))
-        
-        # Validate data quality
-        valid = data.data[:20].min() < data.data[-20:].min()
-        
-        return data, valid
-    
-    def _extract_xy_data(self, data):
-        """
-        Extract x and y arrays from data object.
-        
-        Parameters
-        ----------
-        data : object
-            Data object with E centers and weighted_data methods
-            
-        Returns
-        -------
-        tuple
-            (x values, y values)
-        """
-        x = data['E'].centers().nxvalue
-        y = data.weighted_data().nxsignal
-        
-        if self.expfit:
-            y = np.flip(y)
-            x = np.flip(x)
-        
-        return x, y
-    
-    # =====================================================================
-    # Main Fitting Methods
-    # =====================================================================
-    
-    def fit_full(self, scan, H, K, L, cuberad):
-        """
-        Fit complete model (Gaussian + Voigt ± Quadratic).
-        
-        Parameters
-        ----------
-        scan : array-like
-            4D scan data
-        H, K, L : float
-            Coordinates
-        cuberad : int
-            Radius around center
-            
-        Returns
-        -------
-        tuple
-            (result, data, x, y, valid)
-            where result is the lmfit FitResult object
-        """
-        # Extract data
-        data, valid = self._extract_data(scan, H, K, L, cuberad)
-        x, y = self._extract_xy_data(data)
-        
-        # Create models
-        gauss = self._create_gaussian_model()
-        voigt = self._create_voigt_model()
-        
-        # Setup Gaussian parameters
-        params_gauss = self._setup_gaussian_params(gauss, y, x)
-        
-        # Setup Voigt parameters
-        y_voigt_residual = y - gauss.eval(params=params_gauss, x=x)
-        params_voigt = self._setup_voigt_params(voigt, y_voigt_residual, x, params_gauss)
-        
-        # Setup quadratic if requested
-        if self.qfit:
-            quad = self._create_quadratic_model()
-            y_quad_residual = y - (
-                gauss.eval(params=params_gauss, x=x) +
-                voigt.eval(params=params_voigt, x=x)
-            )
-            params_quad = self._setup_quadratic_params(quad, y_quad_residual, x)
-        
-        # Build composite model
-        if self.qfit:
-            if self.expfit:
-                gauss2 = ExponentialGaussianModel(prefix='g2_')
-                params_gauss2 = self._setup_gaussian2_params(gauss2, y, x, params_gauss)
-                model = CompositeModel(gauss2, voigt, self.convolve) + gauss + quad
-                params = params_gauss + params_gauss2 + params_voigt + params_quad
-            else:
-                model = gauss + voigt + quad
-                params = params_gauss + params_voigt + params_quad
-        else:
-            model = gauss + voigt
-            params = params_gauss + params_voigt
-
-        mask = np.ones_like(x)
-        mask = y>0
-        
-        # Perform fit
-        result = model.fit(y, params, x=x, nan_policy='propagate', method=self.method, weights=mask)
-        result = model.fit(y, result.params, x=x, nan_policy='propagate', method = 'leastsq', weights=mask)
-        
-        return result, data, x, y, valid
-    
-    def fit_gauss(self, scan, H, K, L, cuberad):
-        """
-        Fit simple model (Gaussian ± Quadratic, no Voigt).
-        
-        Used for extracting signal without full spectral decomposition.
-        
-        Parameters
-        ----------
-        scan : array-like
-            4D scan data
-        H, K, L : float
-            Coordinates
-        cuberad : int
-            Radius around center
-            
-        Returns
-        -------
-        tuple
-            (result, data, x, y, valid)
-        """
-        # Extract data
-        data, valid = self._extract_data(scan, H, K, L, cuberad)
-        x, y = self._extract_xy_data(data)
-        
-        
-        # Create models
-        gauss = self._create_gaussian_model()
-        
-        # Setup Gaussian parameters
-        params_gauss = self._setup_gaussian_params(gauss, y, x)
-        
-        # Setup quadratic if requested
-        if self.qfit:
-            quad = self._create_quadratic_model()
-            y_quad_residual = y - gauss.eval(params=params_gauss, x=x)
-            params_quad = self._setup_quadratic_params(quad, y_quad_residual, x)
-            model = gauss + quad
-            params = params_gauss + params_quad
-        else:
-            model = gauss
-            params = params_gauss
-        
-        mask = np.ones_like(x)
-        mask = y>0
-        
-        # Perform fit
-        result = model.fit(y, params, x=x, nan_policy='propagate', method=self.method, weights=mask)
-        result = model.fit(y, result.params, x=x, nan_policy='propagate', method = 'leastsq', weights=mask)
-        
-        return result, data, x, y
-    
-    # =====================================================================
-    # Configuration Methods
-    # =====================================================================
-    
-    def set_parameters(self, sigma=None, center=None, qfit=None, expfit=None, 
-                       emax=None, emin=None, method=None):
-        """
-        Update fitter parameters.
-        
-        Parameters
-        ----------
-        sigma : float, optional
-        center : float, optional
-        qfit : bool, optional
-        expfit : bool, optional
-        emax : int, optional
-        emin : int, optional
-        method : str, optional
-        """
-        if sigma is not None:
-            self.sigma = sigma
-        if center is not None:
-            self.center = center
-        if qfit is not None:
-            self.qfit = qfit
-        if expfit is not None:
-            self.expfit = expfit
-        if emax is not None:
-            self.emax = emax
-        if emin is not None:
-            self.emin = emin
-        if method is not None:
-            self.method = method
-
+        return output
