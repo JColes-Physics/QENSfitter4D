@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "4DQENSfitter"
-version = "0.0.1a1"
+dynamic = ["version"]
 description = "Data reduction for single crystal QENS"
 readme = "README.md"
 authors = [{name = "Jared Coles", email = "jared.robert.coles@gmail.com"}]

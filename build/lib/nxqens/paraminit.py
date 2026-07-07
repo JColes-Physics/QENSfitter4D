@@ -17,6 +17,7 @@ from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialG
 from lmfit import minimize, Parameters, report_fit, fit_report, Model, CompositeModel
 from lmfit.lineshapes import s2, tiny
 from lmfit import __version__ as lmfit_version
+from pathlib import Path
 
 
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
@@ -25,7 +26,8 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
 import multiprocessing as mp
-from queue import Queue
+from multiprocessing import Process, Queue, cpu_count, shared_memory, Manager
+#from queue import Queue
 import threading
 
 from nxqensfit import NXQENS
@@ -718,43 +720,40 @@ Parameters
 
 
 
-
 class FittingWorker(QThread):
-    """Worker thread that manages the fitting process with multithreading."""
+    """Worker thread that manages the fitting process with multiprocessing."""
     
     # Signals
-    progress_updated = pyqtSignal(int)  # Progress percentage
-    result_ready = pyqtSignal(dict)     # Individual fit result: {coords, result_data}
+    progress_updated = pyqtSignal(int)
+    result_ready = pyqtSignal(dict)
     fitting_complete = pyqtSignal()
-    fitting_failed = pyqtSignal(str)    # Error message
+    fitting_failed = pyqtSignal(str)
     
-    def __init__(self, h_range, k_range, l_range, data, num_cores, 
+    def __init__(self, h_range, k_range, l_range, data, nxentry, num_cores, 
                  init_conditions):
-        """
-        Args:
-            h_range: tuple (min, max, step) for H
-            k_range: tuple (min, max, step) for K
-            l_range: tuple (min, max, step) for L
-            num_cores: number of worker threads
-            fitting_function: callable that performs the fit
-            *fitting_args: additional args to pass to fitting_function
-        """
         super().__init__()
         self.h_range = h_range
         self.k_range = k_range
         self.l_range = l_range
-        self.num_cores = num_cores
+        self.num_cores = num_cores if num_cores > 0 else cpu_count()
         self.data = data
+        self.nxentry = nxentry
         self.init_conditions = init_conditions
         
-        params={param:self.init_conditions[param].nxvalue for param in self.init_conditions}
-        
+        params = {param: self.init_conditions[param].nxvalue 
+                  for param in self.init_conditions}
         self.__dict__.update(params)
-
+        
         self._logger = None
-
         self.is_running = True
         self._lock = threading.Lock()
+        self.task_directory = Path.home()/'.nexpy'
+
+        nxsetconfig(memory=5200)
+
+        
+
+        #self.logger.info("Initilized FittingWorker")
 
     @property
     def logger(self):
@@ -772,13 +771,8 @@ class FittingWorker(QThread):
             self._logger.addHandler(fileHandler)
         return self._logger
     
-    def stop(self):
-        """Signal the worker to stop."""
-        with self._lock:
-            self.is_running = False
-    
     def run(self):
-        """Main fitting loop with multithreaded Q-space sampling."""
+        """Main fitting loop with multiprocessing and shared memory."""
         try:
             # Generate all (H, K, L) coordinates
             h_vals = np.arange(self.h_range[0], self.h_range[1] + tiny, 
@@ -788,154 +782,225 @@ class FittingWorker(QThread):
             l_vals = np.arange(self.l_range[0], self.l_range[1] + tiny, 
                                 self.l_range[2])
             
-            # Create mesh of all coordinate combinations
             hkl_coords = np.array(np.meshgrid(h_vals, k_vals, l_vals, indexing='ij'))
-            hkl_coords = hkl_coords.reshape(3, -1).T  # Shape: (N, 3)
+            hkl_coords = hkl_coords.reshape(3, -1).T
             
             total_points = len(hkl_coords)
             result_queue = Queue()
             
-            # Start worker thread pool
-            worker_threads = []
+            self.logger.info(f"Initializing fits, initialized {total_points} to fit")
+
+            npdata = self.data#.nxsignal.nxvalue
+            data_axes = None#[self.data[axis].nxvalue for axis in self.data.axes]
+
+            npnxentry = None
+            if self.v2_model != 'None (Fit Independently)':
+                npnxentry = self.nxentry[self.v2_model]
+
+            
+            # Divide work into chunks for each process
+            chunk_size = (total_points + self.num_cores - 1) // self.num_cores
+            processes=[]
+            
             for i in range(self.num_cores):
-                t = threading.Thread(
-                    target=self._worker_thread,
-                    args=(result_queue, hkl_coords, i)
+                start_idx = i * chunk_size
+                end_idx = min(start_idx + chunk_size, total_points)
+                
+                if start_idx >= total_points:
+                    break
+                
+                p = Process(
+                    target=self._worker_process,
+                    args=(result_queue, hkl_coords[start_idx:end_idx],
+                          npdata, npnxentry,
+                          self._get_worker_config())
                 )
-                t.daemon = True
-                t.start()
-                worker_threads.append(t)
+                p.start()
+                processes.append(p)
+            
+            self.logger.info(f"Started {len(processes)} worker processes")
             
             # Collect results from queue
             processed = 0
             while processed < total_points:
                 with self._lock:
                     if not self.is_running:
+                        # Terminate all processes
+                        for p in processes:
+                            if p.is_alive():
+                                p.terminate()
                         self.fitting_failed.emit("Fitting cancelled by user")
                         return
                 
                 try:
-                    result = result_queue.get(timeout=1)
+                    result = result_queue.get(timeout=2)
                     if result is not None:
                         self.result_ready.emit(result)
                         processed += 1
                         progress = int((processed / total_points) * 100)
                         self.progress_updated.emit(progress)
+                    if result is None:
+                        processed += 1
                 except:
-                    # Timeout or empty queue, check if threads are alive
-                    if not any(t.is_alive() for t in worker_threads):
+                    # Check if any processes are still alive
+                    if not any(p.is_alive() for p in processes):
                         break
             
-            # Wait for all threads to finish
-            for t in worker_threads:
-                t.join(timeout=5)
+            # Wait for all processes to finish
+            for p in processes:
+                p.join(timeout=10)
+                if p.is_alive():
+                    p.terminate()
             
             self.fitting_complete.emit()
+            self.logger.info("Fitting complete")
             
         except Exception as e:
-            self.logger.info(f"Error during fitting: {str(e)}")
-    
-    def _worker_thread(self, result_queue, hkl_coords, thread_id):
-        """Worker thread function - processes HKL points."""
-        num_points = len(hkl_coords)
-        points_per_thread = (num_points + self.num_cores - 1) // self.num_cores
-        start_idx = thread_id * points_per_thread
-        end_idx = min(start_idx + points_per_thread, num_points)
-        
-        try:
-            self.logger.info(f"Thread {thread_id} starting: processing points {start_idx} to {end_idx}")
-        except:
-            pass
-
-        for idx in range(start_idx, end_idx):
-            with self._lock:
-                if not self.is_running:
-                    return
-            
-            h, k, l = hkl_coords[idx]
-            
             try:
-                if self.dQ > 0:
-                    data = self.data[self.Emin:self.Emax,
-                                l-(self.dQ/2):l+(self.dQ/2),
-                                k-(self.dQ/2):k+(self.dQ/2),
-                                h-(self.dQ/2):h+(self.dQ/2)].sum((1,2,3))
-                if self.dQ <= 0:
-                    data = self.data[self.Emin:self.Emax,
-                                    l,k,h]
-                if data.nxsignal.shape != data[data.axes].shape:
-                    try:
-                        data = NXdata(data.nxsignal,data[data.axes].centers(),errors=data[data.errors])
-                    except:
-                        data = NXdata(data.nxsignal,data[data.axes].centers())
+                self.logger.error(f"Error during fitting: {str(e)}")
+            except:
+                self.fitting_failed.emit(str(e))
+                pass
+            self.fitting_failed.emit(str(e))
+        
+        finally: 
+            # Ensure all processes are terminated
+            for p in processes:
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=5)
+            
+            self.fitting_complete.emit()
+    
+    def _get_worker_config(self):
+        """Return configuration dictionary for worker processes."""
+        return {
+            'Emin': self.Emin,
+            'Emax': self.Emax,
+            'dQ': self.dQ,
+            'flip_energy_spectra': self.flip_energy_spectra,
+            'cut_energy': self.cut_energy,
+            'cut_min_input': self.energy_cut_min,
+            'cut_max_input': self.energy_cut_max,
+            'v2_model': self.v2_model,
+            'gaussian_fit': self.gaussian_fit,
+            'voigt_1_fit': self.voigt_1_fit,
+            'voigt_2_fit': self.voigt_2_fit,
+            'fit_exponential_gauss': self.fit_exponential_gauss,
+            'gaussian_amplitude_fraction': self.gaussian_amplitude_fraction,
+            'voigt_1_amplitude_fraction': self.voigt_1_amplitude_fraction,
+            'voigt_2_amplitude_fraction': self.voigt_2_amplitude_fraction,
+            'sigma': self.sigma,
+            'center': self.center,
+            'decay': self.decay,
+            'sigma_fixed': self.sigma_fixed,
+            'center_fixed': self.center_fixed,
+            'method': self.method,
+        }
+    
+    @staticmethod
+    def _worker_process(result_queue, hkl_coords_chunk, data, nxentry, config):
+        """Static worker process function - runs in separate Python process."""    
+        for h, k, l in hkl_coords_chunk:
+            try:
+                # Extract configuration
+                Emin = config['Emin']
+                Emax = config['Emax']
+                dQ = config['dQ']
+
+                # Process data for this coordinate
+                # Access shared memory array directly
+                if dQ > 0:
+                    data_slice = data[Emin:Emax,
+                                (l-(dQ/2)):(l+(dQ/2)),
+                                (k-(dQ/2)):(k+(dQ/2)),
+                                (h-(dQ/2)):(h+(dQ/2))].sum((1,2,3))
+                else:
+                    data_slice = data[Emin:Emax, (l), (k), (h)]
                 
-                if self.flip_energy_spectra:
-                    axes = data[data.axes]
-                    diff = abs(axes.max())-abs(axes.min())
-                    try:
-                        data = NXdata(np.flip(data.nxsignal),axes=(data[data.axes]-diff),errors=np.flip(data[data.errors]))
-                    except:
-                        data = NXdata(np.flip(data.nxsignal),axes=(data[data.axes]-diff))
-
-                if (np.isnan(data.nxsignal).sum() > data.nxsignal.shape[0]/4) or ((data.nxsignal==0).sum() > data.nxsignal.shape[0]/4):
+                # Convert to numpy array if needed for processing
+                if hasattr(data_slice, 'nxsignal'):
+                    if data_slice.nxsignal.shape != data_slice[data_slice.axes].shape:
+                        try:
+                            data_slice = NXdata(data_slice.nxsignal, 
+                                                data_slice[data_slice.axes].centers(),
+                                                errors=data_slice[data_slice.errors])
+                        except:
+                            data_slice = NXdata(data_slice.nxsignal, 
+                                                data_slice[data_slice.axes].centers())
+                
+                if config['flip_energy_spectra']:
+                    if hasattr(data_slice, 'nxsignal'):
+                        axes = data_slice[data_slice.axes]
+                        diff = abs(axes.max()) - abs(axes.min())
+                        try:
+                            data_slice = NXdata(np.flip(data_slice.nxsignal),
+                                                axes=(data_slice[data_slice.axes] - diff),
+                                                errors=np.flip(data_slice[data_slice.errors]))
+                        except:
+                            data_slice = NXdata(np.flip(data_slice.nxsignal),
+                                                axes=(data_slice[data_slice.axes] - diff))
+                
+                # Check data quality
+                if hasattr(data_slice, 'nxsignal'):
+                    signal = data_slice.nxsignal.nxvalue if hasattr(data_slice.nxsignal, 'nxvalue') else data_slice.nxsignal
+                else:
+                    signal = data_slice
+                
+                if ((np.isnan(signal).sum() > signal.shape[0]/4) or 
+                    ((signal==0).sum() > signal.shape[0]/4)):
                     result_queue.put(None)
-                    pass
-
-                y = data.nxsignal.nxvalue
+                    continue
+                
+                y = signal if isinstance(signal, np.ndarray) else signal.copy()
                 y = np.nan_to_num(y)
-                x = data[data.axes].nxvalue
-                self.fit_x = x
-
-                # Find initial data masks for weighting fits
-                if self.cut_energy:
-                    mask = (data[data.axes].nxvalue>self.cut_min_input.value()) & (data[data.axes].nxvalue<self.cut_max_input.value()) | (data.nxsignal.nxvalue==0) | np.isnan(data.nxsignal.nxvalue)
-                if not self.cut_energy:
-                    mask = data.nxsignal.nxvalue==0 | np.isnan(data.nxsignal.nxvalue)
-
-                if self.v2_model == 'None (Fit Independently)':
-                    v2gamm = None
-                elif self.v2_model != 'None (Fit Independently)':
-                    v2gamm = self.nxentry[self.v2_model][l,k,h]
-
-
-                # Call fitting function with the dQ step size
+                
+                if hasattr(data_slice, 'axes'):
+                    x = data_slice[data_slice.axes].nxvalue if hasattr(data_slice[data_slice.axes], 'nxvalue') else data_slice[data_slice.axes]
+                else:
+                    x = np.arange(len(y))
+                
+                # Create mask
+                if config['cut_energy']:
+                    mask = ((x > config['energy_cut_max']) & 
+                            (x < config['energy_cut_min']) | 
+                            (signal == 0) | 
+                            np.isnan(signal))
+                else:
+                    mask = ((signal == 0) | 
+                            np.isnan(signal))
+                
+                v2gamm = None
+                if config['v2_model'] != 'None (Fit Independently)':
+                    v2gamm = nxentry[(l), (k), (h)]
+                
+                # Perform fit
                 fit_result = NXQENS(
                     x, y, mask,
-                    g1=self.gaussian_fit,
-                    v1=self.voigt_1_fit,
-                    v2=self.voigt_2_fit,
-                    decay=self.fit_exponential_gauss,
-                    g1frac=self.gaussian_amplitude_fraction,
-                    v1frac=self.voigt_1_amplitude_fraction,
-                    v2frac=self.voigt_2_amplitude_fraction,
-                    sigma=self.sigma,
-                    center=self.center,
-                    decayval=self.decay,
-                    fixsigma=self.sigma_fixed,
-                    fixcenter=self.center_fixed,
+                    g1=config['gaussian_fit'],
+                    v1=config['voigt_1_fit'],
+                    v2=config['voigt_2_fit'],
+                    decay=config['fit_exponential_gauss'],
+                    g1frac=config['gaussian_amplitude_fraction'],
+                    v1frac=config['voigt_1_amplitude_fraction'],
+                    v2frac=config['voigt_2_amplitude_fraction'],
+                    sigma=config['sigma'],
+                    center=config['center'],
+                    decayval=config['decay'],
+                    fixsigma=config['sigma_fixed'],
+                    fixcenter=config['center_fixed'],
                     v2gamm=v2gamm,
-                    method=self.method
-                ).fit_data()
+                    method=config['method']
+                ).fit_data_unpickled()
                 
-                result_dict = {
+                result_queue.put({
                     'coords': (float(h), float(k), float(l)),
                     'result': fit_result
-                }
-                result_queue.put(result_dict)
-
-                # try:
-                #     self.logger.info(f"Thread {thread_id} finished")
-                # except:
-                #     pass
+                })
                 
             except Exception as e:
-                result_dict = {
-                    'coords': (float(h), float(k), float(l)),
-                    'result': None
-                }
-                # Log error but continue processing
-                #self.logger.info(f"Error fitting ({h}, {k}, {l}): {str(e)}")
-                result_queue.put(result_dict)
+                result_queue.put(None)
+        
 
 
 class FittingDialog(NXDialog):
@@ -968,6 +1033,7 @@ class FittingDialog(NXDialog):
         self.is_fitting = False
 
         self._logger = None
+        self.task_directory = Path.home()/'.nexpy'
         
         self.init_ui()
 
@@ -1132,7 +1198,9 @@ class FittingDialog(NXDialog):
         # if not self.fitting_function:
         #     nexpy.report.error("No fitting function provided")
         #     return
-        
+        self.logger.info("Starting Fitting")
+
+
         # Validate inputs
         if self.h_min.value() > self.h_max.value():
             raise Exception("H min must be <= H max")
@@ -1166,6 +1234,7 @@ class FittingDialog(NXDialog):
         self.worker = FittingWorker(
             h_range, k_range, l_range,
             self.nxdata,
+            self.nxentry,
             self.cores_input.value(),
             self.init_conditions
         )
@@ -1176,7 +1245,7 @@ class FittingDialog(NXDialog):
         self.worker.fitting_complete.connect(self.on_fitting_complete)
         self.worker.fitting_failed.connect(self.on_fitting_failed)
         
-        self.worker.start()
+        self.worker.run()
     
     def on_progress(self, progress):
         """Update progress bar."""
@@ -1186,7 +1255,8 @@ class FittingDialog(NXDialog):
         """Store a fitting result (thread-safe via Qt signal)."""
         coords = result['coords']
         fit_result = result['result']
-        self.results_matrix[coords] = fit_result
+        if fit_result:
+            self.results_matrix[coords] = fit_result
 
         #self.logger.info(f"Result stored: {coords} -> {fit_result}")    
         #self.logger.info(f"Total results so far: {len(self.results_matrix)}")
@@ -1195,7 +1265,7 @@ class FittingDialog(NXDialog):
         # print(f"Fitted {coords}: {fit_result}")
 
     def cancel_fitting(self):
-        self.worker.stop()
+        self.worker.terminate()
         self.is_fitting=False
 
         # Re-enable controls
@@ -1210,6 +1280,8 @@ class FittingDialog(NXDialog):
         self.l_max.setEnabled(True)
         self.dq_input.setEnabled(True)
         self.cores_input.setEnabled(True)
+
+        self.logger.info('User terminated fitting')
     
     def on_fitting_complete(self):
         """Handle fitting completion."""
@@ -1279,7 +1351,7 @@ class FittingDialog(NXDialog):
         #initialize nxdata sets to save
         import random
         randpoint,randresult=random.choice(list(self.results_matrix.items()))
-        params_to_save = [param for param in randresult.params if randresult.params[param].vary]
+        params_to_save = randresult[0].keys()
 
         nxsave = NXentry()
         for param in params_to_save:
@@ -1289,30 +1361,42 @@ class FittingDialog(NXDialog):
         nxsave['fitted_parameters'] = self.init_conditions
 
         for idx,result in self.results_matrix.items():
-            h,k,l = idx
-            nxsave['redchi'].signal[l,k,h] = result.redchi
-            nxsave['rsquared'].signal[l,k,h] = result.rsquared
+            x,y,z = idx
+            l = self.isnear(z,L)
+            k = self.isnear(y,K)
+            h = self.isnear(x,H)
+            nxsave['redchi'].nxsignal[l,k,h] = result[2]['redchi']
+            nxsave['rsquared'].nxsignal[l,k,h] = result[2]['rsquared']
             for param in params_to_save:
-                nxsave[param].signal[l,k,h] = result.params[param].value
-                nxsave[param].signal_errors[l,k,h] = result.params[param].stderr
+                nxsave[param].nxsignal[l,k,h] = result[0][param]
+                if not result[1][param] == None:
+                    nxsave[param].signal_errors[l,k,h] = result[1][param]
+                elif result[1][param] == None:
+                    nxsave[param].signal_errors[l,k,h] = np.nan
 
-        if self.root:
-            self.root.unlock()
+        if self.nxroot:
+            self.nxroot.unlock()
             if 'QENSfit_results' in self.nxentry:
                 del self.nxentry['QENSfit_results']
             self.nxentry['QENSfit_results'] = nxsave
 
             self.logger.info('Results saved to QENSfit_results')
-            self.root.lock()
-        elif not self.root:
+            self.nxroot.lock()
+        elif not self.nxroot:
             try:
                 if 'QENSfit_results' in self.nxentry:
                     del self.nxentry['QENSfit_results']
                 self.nxentry['QENSfit_results'] = nxsave
-
                 self.logger.info('Results saved to QENSfit_results')
             except:
-                self.logger.info('Failed to save results')
+                self.logger.info('Failed to save results, attempting to pickle instead')
+                import pickle
+                with open('emergency_pickle.pkl', 'wb') as f:
+                    pickle.dump(self.results_matrix,f)
+        
+    def isnear(self,val,array):
+        return np.absolute(array-val).argmin()
+                
             
 
         

@@ -325,104 +325,15 @@ class NXQENS:
         return (out[noff:])[:npts]
     
     def fit_data_unpickled(self):
+
         result = self.fit_data()
 
-        if self.g1:
-            gauss_amplitude_value = result.params['g0_amplitude'].value
-            gauss_amplitude_stderr = result.params['g0_amplitude'].stderr
-            sigma_value = result.params['g0_sigma'].value
-            sigma_stderr = result.params['g0_sigma'].stderr
-            center_value = result.params['g0_center'].value
-            center_stderr = result.params['g0_center'].stderr
-            if self.decay:
-                decay_value = result.params['g0_gamma'].value
-                decay_value = result.params['g0_gamma'].stderr
-        if not self.g1:
-            gauss_amplitude_value = 0
-            gauss_amplitude_stderr = 0
+        params_to_save = [param for param in result.params if result.params[param].vary]
 
-        if self.v1:
-            v1_amplitude_value = result.params['v1_amplitude'].value
-            v1_amplitude_stderr = result.params['v1_amplitude'].stderr
-            if not self.decay:
-                v1_gamma_value = result.params['v1_gamma'].value
-                v1_gamma_stderr = result.params['v1_gamma'].stderr
-                if not self.g1:
-                    sigma_value = result.params['v1_sigma'].value
-                    sigma_stderr = result.params['v1_sigma'].stderr
-                    center_value = result.params['v1_center'].value
-                    center_stderr = result.params['v1_center'].stderr
-            elif self.decay:
-                v1_gamma_value = result.params['v1_sigma'].value
-                v1_gamma_stderr = result.params['v1_sigma'].stderr
-                if not self.g1:
-                    sigma_value = result.params['g1_sigma'].value
-                    sigma_stderr = result.params['g1_sigma'].stderr
-                    center_value = result.params['g1_center'].value
-                    center_stderr = result.params['g1_center'].stderr
-                    decay_value = result.params['g1_gamma'].value
-                    decay_stderr = result.params['g1_gamma'].value
-        if not self.v1:
-            v1_amplitude_value = 0
-            v1_amplitude_stderr = 0
-            v1_gamma_value = 0
-            v1_gamma_stderr = 0
+        for param in params_to_save:
+            output = {param:result.params[param].value}
+            error_output = {param:result.params[param].stderr}
 
+        outputqual = {'redchi':result.redchi,'rsquared':result.rsquared}
 
-        if self.v2:
-            v2_amplitude_value = result.params['v2_amplitude'].value
-            v2_amplitude_stderr = result.params['v2_amplitude'].stderr
-            if not self.decay:
-                v2_gamma_value = result.params['v2_gamma'].value
-                v2_gamma_stderr = result.params['v2_gamma'].stderr
-                if (not self.g1) and (not self.v1):
-                    sigma_value = result.params['v2_sigma'].value
-                    sigma_stderr = result.params['v2_sigma'].stderr
-                    center_value = result.params['v2_center'].value
-                    center_stderr = result.params['v2_center'].stderr
-            elif self.decay:
-                v2_gamma_value = result.params['v2_sigma'].value
-                v2_gamma_stderr = result.params['v2_sigma'].stderr
-                if (not self.g1) and (not self.v1):
-                    sigma_value = result.params['g2_sigma'].value
-                    sigma_stderr = result.params['g2_sigma'].stderr
-                    center_value = result.params['g2_center'].value
-                    center_stderr = result.params['g2_center'].stderr
-                    decay_value = result.params['g2_gamma'].value
-                    decay_stderr = result.params['g2_gamma'].value
-        if not self.v2:
-            v2_amplitude_value = 0
-            v2_amplitude_stderr = 0
-            v2_gamma_value = 0
-            v2_gamma_stderr = 0
-
-        if not self.decay:
-            decay_value = 0
-            decay_stderr = 0
-
-        bkg_c_value = result.params['bkg_c'].value
-        bkg_c_stderr = result.params['bkg_c'].stderr
-
-        output = (
-            gauss_amplitude_value,
-            gauss_amplitude_stderr,
-            v1_amplitude_value,
-            v1_amplitude_stderr,
-            v1_gamma_value,
-            v1_gamma_stderr,
-            v2_amplitude_value,
-            v2_amplitude_stderr,
-            v2_gamma_value,
-            v2_gamma_stderr,
-            decay_value,
-            decay_stderr,
-            bkg_c_value,
-            bkg_c_stderr,
-            sigma_value,
-            sigma_stderr,
-            center_value,
-            center_stderr,
-            result.rsquared,
-            result.redchi,
-        )
-        return output
+        return [output,error_output,outputqual]

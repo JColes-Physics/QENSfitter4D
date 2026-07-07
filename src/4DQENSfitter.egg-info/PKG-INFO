@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: 4DQENSfitter
-Version: 0.0.1a1
+Version: 0.0.0
 Summary: Data reduction for single crystal QENS
 Author-email: Jared Coles <jared.robert.coles@gmail.com>
 Keywords: neutron scattering,data analysis,visualization,QENS
