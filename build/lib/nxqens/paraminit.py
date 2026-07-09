@@ -1,22 +1,15 @@
 import numpy as np
 import logging
 from nexusformat.nexus import NeXusError, NXdata, NXfield
-from nexusformat.nexus.tree import centers
 
-from nexpy.gui.utils import display_message, format_float, load_models, report_error
-from nexpy.gui.widgets import (GridParameters, NXDialog, NXCheckBox, NXColorBox, NXComboBox, NXLabel,
-                      NXLineEdit, NXMessageBox, NXPanel, NXPushButton,
-                      NXrectangle, NXScrollArea, NXTab, NXDoubleSpinBox)
-from nexpy.gui.pyqt import QtCore, QtWidgets, QtGui
-from nexpy.gui.plotview import NXPlotView, linestyles
+from nexpy.gui.utils import report_error
+from nexpy.gui.widgets import (NXDialog, NXDoubleSpinBox)
+from nexpy.gui.pyqt import QtWidgets, QtGui
 
-from nexusformat.nexus import (NeXusError, NXdata, NXentry, NXfield, NXlink, NXprocess,
-                               nxgetconfig, nxopen, nxsetconfig)
+from nexusformat.nexus import (NeXusError, NXdata, NXentry, NXfield, NXlink, NXprocess, nxsetconfig)
 
-from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialGaussianModel, LorentzianModel, ConstantModel
-from lmfit import minimize, Parameters, report_fit, fit_report, Model, CompositeModel
+from lmfit import Parameters, fit_report
 from lmfit.lineshapes import s2, tiny
-from lmfit import __version__ as lmfit_version
 from pathlib import Path
 
 
@@ -26,16 +19,10 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
 import multiprocessing as mp
-from multiprocessing import Process, Queue, cpu_count, shared_memory, Manager
-#from queue import Queue
+from multiprocessing import Process, Queue, cpu_count
 import threading
 
 from nxqensfit import NXQENS
-
-import inspect
-import re
-from itertools import cycle
-
 
 
 def show_dialog(parent=None):
@@ -74,7 +61,6 @@ class initparamswindow(NXDialog):
 
 
     def open_fit_window(self):
-        #dialog2 = FitTab(self.selected_data.title.nxvalue,self.selected_data)
         dialog2 = SpectralFittingWidget(nxdata=self.selected_data,nxentry=self.entry)
         dialog2.show()
         pass

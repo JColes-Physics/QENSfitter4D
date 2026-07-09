@@ -1186,7 +1186,6 @@ class FittingDialog(NXDialog):
         #     return
         self.logger.info("Starting Fitting")
 
-
         # Validate inputs
         if self.h_min.value() > self.h_max.value():
             raise Exception("H min must be <= H max")

@@ -330,9 +330,11 @@ class NXQENS:
 
         params_to_save = [param for param in result.params if result.params[param].vary]
 
+        output = {}
+        error_output = {}
         for param in params_to_save:
-            output = {param:result.params[param].value}
-            error_output = {param:result.params[param].stderr}
+            output[param] = result.params[param].value
+            error_output[param] = result.params[param].stderr
 
         outputqual = {'redchi':result.redchi,'rsquared':result.rsquared}
 

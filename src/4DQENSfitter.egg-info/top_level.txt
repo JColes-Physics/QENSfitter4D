@@ -1,2 +1,3 @@
 nxqens
 nxqensfit
+scripts
