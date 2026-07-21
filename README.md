@@ -17,7 +17,7 @@ pip install .
 
 ## Usage
 
-This plugin allows for analysis of 4D QENS data in the NeXus file format (signal shape taking the form of [E,H,K,L]). The files are fit by allowing users to first initialized initial conditions for fitting by fitting individual Q-points. 
+This plugin allows for analysis of 4D QENS data in the NeXus file format (signal shape taking the form of [E,L,K,H]). The files are fit by allowing users to first initialized initial conditions for fitting by fitting individual Q-points. 
 
 These initial fitting conditions can then be passed to an automated mutli-threaded algorithm which raster-scans through the data fitting points independantly. 
 
