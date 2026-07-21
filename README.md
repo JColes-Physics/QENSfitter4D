@@ -10,7 +10,7 @@ As of Tues Jul 21st 2026, this software is still in beta early developement. How
 Clone the repo and install dependencies:
 
 ```bash
-git clone https://github.com/JColes-Physics/QENSfitter4D
+git clone https://github.com/JColes-Physics/QENSfitter4D.git
 cd QENSfitter4D
 pip install .
 ```
