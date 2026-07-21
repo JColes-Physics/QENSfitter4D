@@ -1,7 +1,7 @@
-# QENS Fitter 4D 
+# QENS fitter 4D 
 ## Description  
 
-A plugin for the software package ([NeXpy](https://nexpy.github.io/nexpy/)). This plugin can be loaded into the window menu and used for semi-automated fitting of 4D-QENS data collected at time-of-flight direct geometry instruments.
+A plugin for the software package ([NeXpy](https://nexpy.github.io/nexpy/)). This plugin can be loaded into the window menu and used for semi-automated fitting of 4D-QENS data collected at time-of-flight direct geometry instruments. This software has been built on the foundations developed in one of the first ([4D-QENS papers](https://doi.org/10.1103/b93d-755s)).
 
 As of Tues Jul 21st 2026, this software is still in beta early developement. However, it currently only has two functional datasets on which it can be tested. Further collaboration and developements are welcome from the greater single crystal QENS community.
 
