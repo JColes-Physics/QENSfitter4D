@@ -253,36 +253,36 @@ class NXQENS:
 
 
         #initialize model using functional constant background
-        if not decay:
-            model = const
-            params = constParams
-        if decay:
-            gbkgParams = gbkg.guess(y,x)
-            if v2:
-                for param in gbkgParams:
-                        gbkgParams[param].set(expr='g2_'+param[5:])
-            if v1:
-                for param in gbkgParams:
-                        gbkgParams[param].set(expr='g1_'+param[5:])
-            if g1:
-                for param in gbkgParams:
-                        gbkgParams[param].set(expr='g0_'+param[5:])
-            elif not (v2 or v1 or g1):
-                gbkgParams['g2_gamma'].set(value=decayval)
-                gbkgParams['gbkg_amplitude'].set(min=0,
-                                                    max=y.max(),
-                                                    vary=True,
-                                                    value=gbkgParams['gbkg_amplitude']*g1frac,
-                                                    )
-                if gbkgParams['gbkg_amplitude']<0:
-                    gbkgParams['gbkg_amplitude'].set(value=-1*gbkgParams['gbkg_amplitude'])
-                gbkgParams['gbkg_center'].set(value=center,
-                                                vary=(not fixcenter))
-                gbkgParams['gbkg_sigma'].set(value=sigma,
-                                                vary=(not fixsigma))
+        # if not decay:
+        model = const
+        params = constParams
+        # if decay:
+        #     gbkgParams = gbkg.guess(y,x)
+        #     if v2:
+        #         for param in gbkgParams:
+        #                 gbkgParams[param].set(expr='g2_'+param[5:])
+        #     if v1:
+        #         for param in gbkgParams:
+        #                 gbkgParams[param].set(expr='g1_'+param[5:])
+        #     if g1:
+        #         for param in gbkgParams:
+        #                 gbkgParams[param].set(expr='g0_'+param[5:])
+        #     elif not (v2 or v1 or g1):
+        #         gbkgParams['g2_gamma'].set(value=decayval)
+        #         gbkgParams['gbkg_amplitude'].set(min=0,
+        #                                             max=y.max(),
+        #                                             vary=True,
+        #                                             value=gbkgParams['gbkg_amplitude']*g1frac,
+        #                                             )
+        #         if gbkgParams['gbkg_amplitude']<0:
+        #             gbkgParams['gbkg_amplitude'].set(value=-1*gbkgParams['gbkg_amplitude'])
+        #         gbkgParams['gbkg_center'].set(value=center,
+        #                                         vary=(not fixcenter))
+        #         gbkgParams['gbkg_sigma'].set(value=sigma,
+        #                                         vary=(not fixsigma))
 
-            model = CompositeModel(gbkg,const,self.convolve)
-            params = constParams + gbkgParams
+        #     model = CompositeModel(gbkg,const,self.convolve)
+        #     params = constParams + gbkgParams
 
 
         # Create full model

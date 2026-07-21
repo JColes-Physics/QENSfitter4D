@@ -610,30 +610,34 @@ Parameters
         pass
 
     def save_init_params(self):
+        self.root.unlock()
+        
         if 'QENSfit_conditions' in self.nxentry:
             del self.nxentry['QENSfit_conditions']
         self.nxentry['QENSfit_conditions'] = NXprocess(dQ=self.dq_input.value(),
-                                                     Emax=self.emax_input.value(),
-                                                     Emin=self.emin_input.value(),
-                                                     sigma=self.sigma_input.value(),
-                                                     sigma_fixed=self.fix_sigma_cb.isChecked(),
-                                                     center=self.center_input.value(),
-                                                     center_fixed=self.fix_center_cb.isChecked(),
-                                                     fit_exponential_gauss=self.decay_cb.isChecked(),
-                                                     decay=self.decay_input.value(),
-                                                     gaussian_fit=self.elastic_cb.isChecked(),
-                                                     voigt_1_fit=self.voigt_1_cb.isChecked(),
-                                                     voigt_2_fit=self.voigt_2_cb.isChecked(),
-                                                     cut_energy=self.cut_data_cb.isChecked(),
-                                                     energy_cut_min=self.cut_min_input.value(),
-                                                     energy_cut_max=self.cut_max_input.value(),
-                                                     flip_energy_spectra=self.flip_cb.isChecked(),
-                                                     method=str(self.method_combo.currentText()),
-                                                     gaussian_amplitude_fraction = self.v1frac_input.value(),
-                                                     voigt_1_amplitude_fraction = self.v1frac_input.value(),
-                                                     voigt_2_amplitude_fraction = self.v2frac_input.value(),
-                                                     v2_model = str(self.voigt_model_combo.currentText()),
-                                                     )
+                                                    Emax=self.emax_input.value(),
+                                                    Emin=self.emin_input.value(),
+                                                    sigma=self.sigma_input.value(),
+                                                    sigma_fixed=self.fix_sigma_cb.isChecked(),
+                                                    center=self.center_input.value(),
+                                                    center_fixed=self.fix_center_cb.isChecked(),
+                                                    fit_exponential_gauss=self.decay_cb.isChecked(),
+                                                    decay=self.decay_input.value(),
+                                                    gaussian_fit=self.elastic_cb.isChecked(),
+                                                    voigt_1_fit=self.voigt_1_cb.isChecked(),
+                                                    voigt_2_fit=self.voigt_2_cb.isChecked(),
+                                                    cut_energy=self.cut_data_cb.isChecked(),
+                                                    energy_cut_min=self.cut_min_input.value(),
+                                                    energy_cut_max=self.cut_max_input.value(),
+                                                    flip_energy_spectra=self.flip_cb.isChecked(),
+                                                    method=str(self.method_combo.currentText()),
+                                                    gaussian_amplitude_fraction = self.v1frac_input.value(),
+                                                    voigt_1_amplitude_fraction = self.v1frac_input.value(),
+                                                    voigt_2_amplitude_fraction = self.v2frac_input.value(),
+                                                    v2_model = str(self.voigt_model_combo.currentText()),
+                                                    )
+        self.logger.info('Initial params saved to QENSfit_conditions')
+        self.root.lock()
         pass
     
     # ==================== HELPER METHODS ====================

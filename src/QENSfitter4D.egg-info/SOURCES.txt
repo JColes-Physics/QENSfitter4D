@@ -1,5 +1,6 @@
 .DS_Store
 LICENSE
+README.md
 pyproject.toml
 nxqens.egg-info/PKG-INFO
 nxqens.egg-info/SOURCES.txt
@@ -15,6 +16,12 @@ src/4DQENSfitter.egg-info/dependency_links.txt
 src/4DQENSfitter.egg-info/entry_points.txt
 src/4DQENSfitter.egg-info/requires.txt
 src/4DQENSfitter.egg-info/top_level.txt
+src/QENSfitter4D.egg-info/PKG-INFO
+src/QENSfitter4D.egg-info/SOURCES.txt
+src/QENSfitter4D.egg-info/dependency_links.txt
+src/QENSfitter4D.egg-info/entry_points.txt
+src/QENSfitter4D.egg-info/requires.txt
+src/QENSfitter4D.egg-info/top_level.txt
 src/nxqens/.DS_Store
 src/nxqens/__init__.py
 src/nxqens/incohmodel.py

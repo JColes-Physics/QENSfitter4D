@@ -1,2 +1,0 @@
-[nexpy.plugins]
-initialize = nxqens:plugin_menu

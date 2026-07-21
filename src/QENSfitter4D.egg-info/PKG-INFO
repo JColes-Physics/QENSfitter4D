@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
-Name: nxqens
-Version: 0.0.1a1
+Name: QENSfitter4D
+Version: 0.0.0
 Summary: Data reduction for single crystal QENS
 Author-email: Jared Coles <jared.robert.coles@gmail.com>
 Keywords: neutron scattering,data analysis,visualization,QENS
@@ -17,6 +17,8 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: nexpy>=2.0.0
 Requires-Dist: lmfit
 Requires-Dist: scipy
+Dynamic: license-file
