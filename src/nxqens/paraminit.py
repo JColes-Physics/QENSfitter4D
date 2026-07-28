@@ -9,6 +9,8 @@ from nexpy.gui.pyqt import QtWidgets, QtGui
 from nexusformat.nexus import (NeXusError, NXdata, NXentry, NXfield, NXlink, NXprocess, nxsetconfig)
 
 from lmfit import Parameters, fit_report
+from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialGaussianModel, LorentzianModel
+from lmfit import CompositeModel
 from lmfit.lineshapes import s2, tiny
 from pathlib import Path
 
@@ -199,7 +201,7 @@ class SpectralFittingWidget(NXDialog):
     
     def create_fit_options_section(self):
         """Create section for selecting fit models and options."""
-        group = QtWidgets.QGroupBox('Fit Options')
+        group = QtWidgets.QGroupBox('Define Equation')
         layout = QtWidgets.QVBoxLayout()
 
         self.g1frac_input = NXDoubleSpinBox()
@@ -344,7 +346,7 @@ class SpectralFittingWidget(NXDialog):
         # Data cutting
         cutting_layout = QtWidgets.QHBoxLayout()
         
-        self.cut_data_cb = QtWidgets.QCheckBox('Cut Data Range')
+        self.cut_data_cb = QtWidgets.QCheckBox('Mask Data Range')
         cutting_layout.addWidget(self.cut_data_cb)
         
         # Range input (hidden by default)

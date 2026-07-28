@@ -6,5 +6,5 @@ def plugin_menu():
     menu = 'QENS'  # Top-level menu name in NeXpy
     actions = []
     actions.append(('Initialize Fitting', paraminit.show_dialog))
-    actions.append(('Incoherent Model', incohmodel.show_dialog))
+    actions.append(('Second Voigt', incohmodel.show_dialog))
     return menu, actions

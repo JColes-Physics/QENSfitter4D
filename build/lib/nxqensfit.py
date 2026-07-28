@@ -1,37 +1,25 @@
-import numpy as np
-import math
-import lmfit
-from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialGaussianModel, LorentzianModel, ExponentialModel, ConstantModel
-from lmfit import minimize, Parameters, report_fit, fit_report, Model, CompositeModel
-from scipy.special import wofz, erfc
-from lmfit.lineshapes import s2, tiny
-
-from pathlib import Path
-import logging
-
-
 class NXQENS:
     def __init__(self, x,y,mask=None,g1=False,v1=False,v2=False,decay=False,g1frac=0.01,v1frac=0.01,v2frac=0.01,sigma=0.1,center=0,decayval=0,fixsigma=False,fixcenter=False,v2gamm=None,method='Powell'):
         """
         Function for fitting QENS linewidths
         ----------
-        x,y : float arrays
+        :x,y: float arrays
             Data x,y values
-        mask : float array
+        :mask: float array
             Data to not fit (data points corresponding to 1 in the mask do not factor in the fit)
-        g1,v1,v2,decay : bool
+        :g1,v1,v2,decay: bool
             Boolian decisions for including gauss, voigt(s), and exponential decay contributions to fit
-        g1frac,v1frac,v2frac : float
+        :g1frac,v1frac,v2frac: float
             Float values indicating proportion of LMFIT guess amplitudes to force before fitting
-        sigma : float
+        :sigma: float
             Gaussian sigma parameter
-        center : float
+        :center: float
             Peak center position
-        decayval : float
+        :decayval: float
             Value used by exponential decay in the event there is an exponential decay contribution
-        fixsigma,fixcenter : bool
+        :fixsigma,fixcenter: bool
             State if given sigma or center values should be fixed (True) or allowed to vary (False)
-        v2gamm : float
+        :v2gamm: float
             If not None, will pass v2gamm as fixed variable for second Voigt Gamma parameter
         """
         self.x = x
@@ -52,6 +40,14 @@ class NXQENS:
         self.fixcenter = fixcenter
         self.v2gamm = v2gamm
         self.method = method
+
+        from lmfit import Parameters, fit_report
+        from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialGaussianModel, LorentzianModel
+        from lmfit import CompositeModel
+        from lmfit.lineshapes import s2, tiny
+        from pathlib import Path
+
+        import numpy as np
 
 
         self._logger = None
@@ -253,36 +249,36 @@ class NXQENS:
 
 
         #initialize model using functional constant background
-        # if not decay:
-        model = const
-        params = constParams
-        # if decay:
-        #     gbkgParams = gbkg.guess(y,x)
-        #     if v2:
-        #         for param in gbkgParams:
-        #                 gbkgParams[param].set(expr='g2_'+param[5:])
-        #     if v1:
-        #         for param in gbkgParams:
-        #                 gbkgParams[param].set(expr='g1_'+param[5:])
-        #     if g1:
-        #         for param in gbkgParams:
-        #                 gbkgParams[param].set(expr='g0_'+param[5:])
-        #     elif not (v2 or v1 or g1):
-        #         gbkgParams['g2_gamma'].set(value=decayval)
-        #         gbkgParams['gbkg_amplitude'].set(min=0,
-        #                                             max=y.max(),
-        #                                             vary=True,
-        #                                             value=gbkgParams['gbkg_amplitude']*g1frac,
-        #                                             )
-        #         if gbkgParams['gbkg_amplitude']<0:
-        #             gbkgParams['gbkg_amplitude'].set(value=-1*gbkgParams['gbkg_amplitude'])
-        #         gbkgParams['gbkg_center'].set(value=center,
-        #                                         vary=(not fixcenter))
-        #         gbkgParams['gbkg_sigma'].set(value=sigma,
-        #                                         vary=(not fixsigma))
+        if not decay:
+            model = const
+            params = constParams
+        if decay:
+            gbkgParams = gbkg.guess(y,x)
+            if v2:
+                for param in gbkgParams:
+                        gbkgParams[param].set(expr='g2_'+param[5:])
+            if v1:
+                for param in gbkgParams:
+                        gbkgParams[param].set(expr='g1_'+param[5:])
+            if g1:
+                for param in gbkgParams:
+                        gbkgParams[param].set(expr='g0_'+param[5:])
+            elif not (v2 or v1 or g1):
+                gbkgParams['g2_gamma'].set(value=decayval)
+                gbkgParams['gbkg_amplitude'].set(min=0,
+                                                    max=y.max(),
+                                                    vary=True,
+                                                    value=gbkgParams['gbkg_amplitude']*g1frac,
+                                                    )
+                if gbkgParams['gbkg_amplitude']<0:
+                    gbkgParams['gbkg_amplitude'].set(value=-1*gbkgParams['gbkg_amplitude'])
+                gbkgParams['gbkg_center'].set(value=center,
+                                                vary=(not fixcenter))
+                gbkgParams['gbkg_sigma'].set(value=sigma,
+                                                vary=(not fixsigma))
 
-        #     model = CompositeModel(gbkg,const,self.convolve)
-        #     params = constParams + gbkgParams
+            model = CompositeModel(gbkg,const,self.convolve)
+            params = constParams + gbkgParams
 
 
         # Create full model

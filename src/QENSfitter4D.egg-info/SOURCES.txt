@@ -1,6 +1,7 @@
 .DS_Store
 LICENSE
 README.md
+README.rst
 pyproject.toml
 nxqens.egg-info/PKG-INFO
 nxqens.egg-info/SOURCES.txt
@@ -10,12 +11,6 @@ nxqens.egg-info/requires.txt
 nxqens.egg-info/top_level.txt
 src/.DS_Store
 src/nxqensfit.py
-src/4DQENSfitter.egg-info/PKG-INFO
-src/4DQENSfitter.egg-info/SOURCES.txt
-src/4DQENSfitter.egg-info/dependency_links.txt
-src/4DQENSfitter.egg-info/entry_points.txt
-src/4DQENSfitter.egg-info/requires.txt
-src/4DQENSfitter.egg-info/top_level.txt
 src/QENSfitter4D.egg-info/PKG-INFO
 src/QENSfitter4D.egg-info/SOURCES.txt
 src/QENSfitter4D.egg-info/dependency_links.txt
@@ -26,12 +21,6 @@ src/nxqens/.DS_Store
 src/nxqens/__init__.py
 src/nxqens/incohmodel.py
 src/nxqens/paraminit.py
-src/nxqens.egg-info/PKG-INFO
-src/nxqens.egg-info/SOURCES.txt
-src/nxqens.egg-info/dependency_links.txt
-src/nxqens.egg-info/entry_points.txt
-src/nxqens.egg-info/requires.txt
-src/nxqens.egg-info/top_level.txt
 src/nxqens/__pycache__/__init__.cpython-314.pyc
 src/nxqens/__pycache__/function1.cpython-314.pyc
 src/nxqens/__pycache__/function2.cpython-314.pyc
