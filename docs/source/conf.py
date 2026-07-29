@@ -26,6 +26,7 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.autosummary',
+    'sphinx.ext.githubpages',
 ]
 
 autodoc_mock_imports = ['numpy','lmfit','pathlib','logging']
