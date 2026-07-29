@@ -1,4 +1,0 @@
-Fitting and Saving Models for Second Voigt
-==========================================
-
-.. attention:: This portion of the plugin is still under heavy developement and therefore has not been implemented yet.
