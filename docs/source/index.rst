@@ -40,7 +40,7 @@ This package requires the use of the two following packages, so it is usefull to
 
    includeme
    fileformatting
-   initializing_vars
+   initializing_intput_params
    rasterscanning
    second_voigt
 
