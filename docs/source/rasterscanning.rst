@@ -1,4 +1,4 @@
 Running Multi-Core Fits
 =======================
 
-TBD This section will be populated later
+Under the 'Setting Initial Conditions' window, by using the Raster-Scan Fits button we can initialize automated fitting across the datset. 
