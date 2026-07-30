@@ -25,6 +25,7 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: html-docs
+        docs-folder: "docs/"
         path: docs/build/html/
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
