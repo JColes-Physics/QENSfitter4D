@@ -34,7 +34,7 @@ autodoc_mock_imports = ['numpy','lmfit','pathlib','logging']
 templates_path = ['_templates']
 exclude_patterns = []
 
-html_theme = 'breeze'
+html_theme = 'furo'
 html_theme_options = {'header_tabs': False}
 
 
