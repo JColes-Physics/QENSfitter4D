@@ -8,7 +8,7 @@ QENSfitter4D documentation
 
 QENSfitter4D is a NeXpy plugin which provides a GUI resource for analyzing 4D-QENS data in the nexus format.
 
-This package requires the use of the two following packages, so it is usefull to familiarize oneself with these packages first.
+This package requires the use of the three following packages It is usefull to familiarize oneself with at least the first two packages, NeXpy and NeXus as these will be part of the user interactions. LMFIT is usefull for understanding how the fitting algorithms achieve their results.
 
 **NeXpy**
   `NeXpy <https://github.com/nexpy/nexpy>`__ provides the GUI
@@ -32,6 +32,16 @@ This package requires the use of the two following packages, so it is usefull to
 
   .. image:: https://img.shields.io/conda/vn/conda-forge/nexusformat
      :target: https://anaconda.org/conda-forge/nexusformat
+
+**LMFIT**
+   The API for performing automated fitting functions for dynamic structure factor is
+   provided by the `LMFit <https://lmfit.github.io/lmfit-py/>`__ package.
+
+   .. image:: https://img.shields.io/pypi/v/lmfit
+      :target: https://pypi.org/project/lmfit/
+
+   .. image:: https://img.shields.io/conda/vn/conda-forge/lmfit
+      :target: https://anaconda.org/channels/conda-forge/packages/lmfit/overview
 
 
 .. toctree::
