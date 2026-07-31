@@ -3,14 +3,14 @@ Initializing Fitting Parameters
 
 From the QENS dropdown menu in NeXpy, select 'Initialize Fitting.' From here a window will pop up wich will allow you to select a root, an entry within the selected root, and an NXdata stored within the selected entry. In order to initialize the values we will use for fitting our QENS data we will select the 'Test Fits' option.
 
-.. image:: /images/Screenshot-Launch-Window.png
+.. image:: _static/images/Screenshot-Launch-Window.png
     :width: 80%
 
 
 Performing Test Fits
 --------------------
 
-.. image:: /images/Screenshot-Test-Window.png
+.. image:: _static/images/Screenshot-Test-Window.png
     :width: 80%
 
 Once launched you have the option to select which point you want to fit in HKL format (see :ref:`Data Formatting<dataformatting>` for more details of how H, K, and L are defined by the system). You can also select the maximum and minimum dE to be fit (in meV) and the length of each cubic voxel. 
