@@ -50,7 +50,7 @@ This package requires the use of the three following packages It is usefull to f
 
    includeme
    fileformatting
-   initializing_intput_params
+   initializing_input_params
    rasterscanning
    second_voigt
 
