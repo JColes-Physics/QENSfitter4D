@@ -1,0 +1,12 @@
+﻿nxqensfit
+=========
+
+.. automodule:: nxqensfit
+
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      NXQENS
+   
