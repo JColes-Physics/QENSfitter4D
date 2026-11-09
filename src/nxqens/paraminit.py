@@ -9,16 +9,14 @@ from nexpy.gui.pyqt import QtWidgets, QtGui
 from nexusformat.nexus import (NeXusError, NXdata, NXentry, NXfield, NXlink, NXprocess, nxsetconfig)
 
 from lmfit import Parameters, fit_report
-from lmfit.models import GaussianModel, VoigtModel, QuadraticModel, ExponentialGaussianModel, LorentzianModel
-from lmfit import CompositeModel
 from lmfit.lineshapes import s2, tiny
 from pathlib import Path
 
 
-from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
+from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
                               QDoubleSpinBox, QPushButton, QProgressBar, QGroupBox)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtGui import QFont
 
 import multiprocessing as mp
 from multiprocessing import Process, Queue, cpu_count
@@ -201,7 +199,7 @@ class SpectralFittingWidget(NXDialog):
     
     def create_fit_options_section(self):
         """Create section for selecting fit models and options."""
-        group = QtWidgets.QGroupBox('Define Equation')
+        group = QtWidgets.QGroupBox('Fit Options')
         layout = QtWidgets.QVBoxLayout()
 
         self.g1frac_input = NXDoubleSpinBox()
@@ -346,7 +344,7 @@ class SpectralFittingWidget(NXDialog):
         # Data cutting
         cutting_layout = QtWidgets.QHBoxLayout()
         
-        self.cut_data_cb = QtWidgets.QCheckBox('Mask Data Range')
+        self.cut_data_cb = QtWidgets.QCheckBox('Cut Data Range')
         cutting_layout.addWidget(self.cut_data_cb)
         
         # Range input (hidden by default)
@@ -716,10 +714,10 @@ class FittingWorker(QThread):
     """Worker thread that manages the fitting process with multiprocessing."""
     
     # Signals
-    progress_updated = pyqtSignal(int)
-    result_ready = pyqtSignal(dict)
-    fitting_complete = pyqtSignal()
-    fitting_failed = pyqtSignal(str)
+    progress_updated = Signal(int)
+    result_ready = Signal(dict)
+    fitting_complete = Signal()
+    fitting_failed = Signal(str)
     
     def __init__(self, h_range, k_range, l_range, data, nxentry, num_cores, 
                  init_conditions):
